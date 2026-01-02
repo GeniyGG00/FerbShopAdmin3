@@ -1512,18 +1512,6 @@ bot.on('message', async (msg) => {
                 });
             return;
         }
-            
-            user.waitingForProductPrice = false;
-            user.productPrice = price;
-            user.waitingForProductQuantity = true;
-            
-            bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 4/4</b>\n\n' +
-                `Цена: <b>${price}₽</b>\n\n` +
-                'Введите количество товара:', {
-                parse_mode: 'HTML'
-                });
-            return;
-        }
         
         // Handle product quantity input
         if (user.waitingForProductQuantity) {
@@ -1701,6 +1689,8 @@ bot.on('message', async (msg) => {
             }
             return;
         }
+    
+    }
     
     // Check if user is waiting for comment
     if (user.waitingForComment) {
