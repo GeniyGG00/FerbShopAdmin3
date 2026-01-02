@@ -103,10 +103,10 @@ function removeOutOfStockProducts() {
     return removedProducts;
 }
 
-// Helper function to generate simple product ID (1-999 globally)
+// Helper function to generate simple product ID (10-999 globally)
 function generateProductId() {
     // Find the highest existing ID across all categories
-    let maxNum = 0;
+    let maxNum = 9; // Start from 9 to ensure IDs are at least 2 digits
     
     for (const categoryName in catalog) {
         const category = catalog[categoryName];
@@ -257,7 +257,7 @@ bot.onText(/👨‍💼 Админка/, (msg) => {
         reply_markup: {
             keyboard: [
                 ['📊 Товары в наличии'],
-                ['➕ Добавить товар'],
+                ['➕ Добавить товар', '🚀 Быстрое добавление'],
                 ['🗑️ Удалить товар'],
                 ['📦 Изменить количество'],
                 ['🧹 Очистить отсутствующие'],
@@ -286,7 +286,7 @@ bot.onText(/\/admin/, (msg) => {
         reply_markup: {
             keyboard: [
                 ['📊 Товары в наличии'],
-                ['➕ Добавить товар'],
+                ['➕ Добавить товар', '🚀 Быстрое добавление'],
                 ['🗑️ Удалить товар'],
                 ['📦 Изменить количество'],
                 ['🧹 Очистить отсутствующие'],
@@ -385,6 +385,41 @@ bot.onText(/➕ Добавить товар/, (msg) => {
     };
     
     bot.sendMessage(chatId, '➕ <b>Добавление товара</b>\n\n' +
+        'Выберите категорию:', {
+        parse_mode: 'HTML',
+        ...keyboard
+    });
+});
+
+bot.onText(/🚀 Быстрое добавление/, (msg) => {
+    const chatId = msg.chat.id;
+    const username = msg.from.username;
+    
+    if (!isAdmin(username)) {
+        return bot.sendMessage(chatId, '🚫 У вас нет прав для выполнения этой команды.');
+    }
+    
+    // Set user state to waiting for category selection
+    const user = getUser(chatId);
+    user.waitingForFastCategory = true;
+    
+    const categories = Object.keys(catalog);
+    const categoryButtons = categories.map(cat => [cat]);
+    
+    // Add option for new category
+    categoryButtons.push(['➕ Создать новую категорию']);
+    
+    const keyboard = {
+        reply_markup: {
+            keyboard: [
+                ...categoryButtons,
+                ['🔙 Назад']
+            ],
+            resize_keyboard: true
+        }
+    };
+    
+    bot.sendMessage(chatId, '🚀 <b>Быстрое добавление товаров</b>\n\n' +
         'Выберите категорию:', {
         parse_mode: 'HTML',
         ...keyboard
@@ -755,6 +790,121 @@ bot.on('message', async (msg) => {
     
     // Handle admin commands
     if (isAdmin(username)) {
+        // Handle fast category selection
+        if (user.waitingForFastCategory) {
+            user.waitingForFastCategory = false;
+            
+            if (msg.text === '➕ Создать новую категорию') {
+                user.waitingForFastNewCategory = true;
+                bot.sendMessage(chatId, '🚀 <b>Быстрое добавление - Шаг 2/2</b>\n\n' +
+                    'Введите название новой категории:', {
+                    parse_mode: 'HTML'
+                    });
+                return;
+            }
+            
+            // Check if category exists
+            if (!catalog[msg.text]) {
+                user.waitingForFastCategory = true;
+                bot.sendMessage(chatId, '❌ <b>Категория не найдена!</b>\n\n' +
+                    'Выберите существующую категорию или создайте новую:', {
+                    parse_mode: 'HTML'
+                    });
+                return;
+            }
+            
+            user.selectedCategory = msg.text;
+            user.waitingForFastProducts = true;
+            
+            bot.sendMessage(chatId, '🚀 <b>Быстрое добавление - Шаг 2/2</b>\n\n' +
+                `Выбрана категория: <b>${msg.text}</b>\n\n` +
+                'Отправьте товары в формате:\n\n' +
+                '<code>название цена количество</code>\n\n' +
+                'Можно добавить один товар или несколько (каждый с новой строки):\n\n' +
+                'Пример для одного товара:\n' +
+                '<code>HQD 3000 1200 15</code>\n\n' +
+                'Пример для нескольких товаров:\n' +
+                '<code>HQD 3000 1200 15</code>\n' +
+                '<code>Ivy Bar 1500 10</code>\n' +
+                '<code>Maskking 1800 8</code>', {
+                parse_mode: 'HTML'
+                });
+            return;
+        }
+        
+        // Handle fast new category creation
+        if (user.waitingForFastNewCategory) {
+            user.waitingForFastNewCategory = false;
+            user.selectedCategory = msg.text;
+            user.waitingForFastProducts = true;
+            
+            bot.sendMessage(chatId, '🚀 <b>Быстрое добавление - Шаг 2/2</b>\n\n' +
+                `Создана категория: <b>${msg.text}</b>\n\n` +
+                'Отправьте товары в формате:\n\n' +
+                '<code>название цена количество</code>\n\n' +
+                'Можно добавить один товар или несколько (каждый с новой строки):\n\n' +
+                'Пример для одного товара:\n' +
+                '<code>HQD 3000 1200 15</code>\n\n' +
+                'Пример для нескольких товаров:\n' +
+                '<code>HQD 3000 1200 15</code>\n' +
+                '<code>Ivy Bar 1500 10</code>\n' +
+                '<code>Maskking 1800 8</code>', {
+                parse_mode: 'HTML'
+                });
+            return;
+        }
+        
+        // Handle fast products input
+        if (user.waitingForFastProducts) {
+            user.waitingForFastProducts = false;
+            
+            const lines = msg.text.split('\n').filter(line => line.trim());
+            const addedProducts = [];
+            const errors = [];
+            
+            lines.forEach((line, index) => {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length >= 3) {
+                    // Последние два элемента - цена и количество, все остальное - название
+                    const quantity = parseInt(parts[parts.length - 1]);
+                    const price = parseInt(parts[parts.length - 2]);
+                    const name = parts.slice(0, parts.length - 2).join(' ');
+                    
+                    if (!isNaN(price) && price > 0 && !isNaN(quantity) && quantity >= 0) {
+                        const newProduct = addProduct(user.selectedCategory, name, price, quantity);
+                        addedProducts.push(newProduct);
+                    } else {
+                        errors.push(`Строка ${index + 1}: неверные данные`);
+                    }
+                } else {
+                    errors.push(`Строка ${index + 1}: неверный формат (нужно: название цена количество)`);
+                }
+            });
+            
+            let responseText = `🚀 <b>Результат быстрого добавления:</b>\n\n`;
+            
+            if (addedProducts.length > 0) {
+                responseText += `✅ <b>Добавлено товаров: ${addedProducts.length}</b>\n\n`;
+                responseText += `📦 Категория: <b>${user.selectedCategory}</b>\n\n`;
+                addedProducts.forEach(product => {
+                    responseText += `🆔 ${product.id} | ${product.name} | ${product.price}₽ | ${product.quantity} шт.\n`;
+                });
+            }
+            
+            if (errors.length > 0) {
+                responseText += `\n❌ <b>Ошибки:</b>\n`;
+                errors.forEach(error => {
+                    responseText += `• ${error}\n`;
+                });
+            }
+            
+            // Clean up user state
+            delete user.selectedCategory;
+            
+            bot.sendMessage(chatId, responseText, { parse_mode: 'HTML' });
+            return;
+        }
+        
         // Handle category selection for list addition
         if (user.waitingForCategoryList) {
             user.waitingForCategoryList = false;
@@ -1144,8 +1294,8 @@ bot.on('message', async (msg) => {
                     reply_markup: {
                         keyboard: [
                             ['📊 Товары в наличии'],
-                            ['➕ Добавить товар', '📝 Добавить список'],
-                            ['🗑️ Удалить товар', '🗑️ Массовое удаление'],
+                            ['➕ Добавить товар', '🚀 Быстрое добавление'],
+                            ['🗑️ Удалить товар'],
                             ['📦 Изменить количество'],
                             ['🧹 Очистить отсутствующие'],
                             ['🔙 Назад']
@@ -1416,8 +1566,8 @@ bot.on('message', async (msg) => {
                     reply_markup: {
                         keyboard: [
                             ['📊 Товары в наличии'],
-                            ['➕ Добавить товар', '📝 Добавить список'],
-                            ['🗑️ Удалить товар', '🗑️ Массовое удаление'],
+                            ['➕ Добавить товар', '🚀 Быстрое добавление'],
+                            ['🗑️ Удалить товар'],
                             ['📦 Изменить количество'],
                             ['🧹 Очистить отсутствующие'],
                             ['🔙 Назад']
