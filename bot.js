@@ -103,13 +103,40 @@ function removeOutOfStockProducts() {
     return removedProducts;
 }
 
+// Helper function to generate simple product ID (1-3 digits)
+function generateProductId(categoryName) {
+    const categoryMap = {
+        'Одноразки': 'D',
+        'Подсистемы': 'P', 
+        'Снюс': 'S',
+        'Жидкости': 'L'
+    };
+    
+    const prefix = categoryMap[categoryName] || 'X';
+    const existingProducts = catalog[categoryName] || [];
+    
+    // Find the highest existing number in this category
+    let maxNum = 0;
+    existingProducts.forEach(product => {
+        if (product.id && product.id.startsWith(prefix)) {
+            const num = parseInt(product.id.replace(prefix, ''));
+            if (!isNaN(num) && num > maxNum) {
+                maxNum = num;
+            }
+        }
+    });
+    
+    const newNum = maxNum + 1;
+    return prefix + newNum.toString().padStart(3, '0');
+}
+
 // Helper function to add product
 function addProduct(categoryName, name, price, quantity) {
     if (!catalog[categoryName]) {
         catalog[categoryName] = [];
     }
     
-    const id = categoryName.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
+    const id = generateProductId(categoryName);
     const newProduct = { id, name, price, quantity };
     catalog[categoryName].push(newProduct);
     
@@ -148,30 +175,30 @@ function updateProductQuantity(categoryName, productId, newQuantity) {
     return false;
 }
 
-// Product catalog with quantity tracking
+// Product catalog with quantity tracking and simple IDs (1-3 digits)
 const catalog = {
     'Одноразки': [
-        { id: 'disposable1', name: 'HQD 2500', price: 1000, quantity: 10 },
-        { id: 'disposable2', name: 'Ivy', price: 1200, quantity: 5 },
-        { id: 'disposable3', name: 'Maskking', price: 1500, quantity: 0 }
+        { id: 'D001', name: 'HQD 2500', price: 1000, quantity: 10 },
+        { id: 'D002', name: 'Ivy', price: 1200, quantity: 5 },
+        { id: 'D003', name: 'Maskking', price: 1500, quantity: 0 }
     ],
     'Подсистемы': [
-        { id: 'pod1', name: 'Voopoo', price: 2500, quantity: 3 },
-        { id: 'pod2', name: 'Uwell', price: 3000, quantity: 7 },
-        { id: 'pod3', name: 'спизженный хиро 3 в ахуитительном состоянии', price: 5000, quantity: 1 }
+        { id: 'P001', name: 'Voopoo', price: 2500, quantity: 3 },
+        { id: 'P002', name: 'Uwell', price: 3000, quantity: 7 },
+        { id: 'P003', name: 'спизженный хиро 3 в ахуитительном состоянии', price: 5000, quantity: 1 }
     ],
     'Снюс': [
-        { id: 'snus1', name: 'EPOK', price: 500, quantity: 15 },
-        { id: 'snus2', name: 'Siberia', price: 600, quantity: 8 },
-        { id: 'snus3', name: 'Odens', price: 550, quantity: 0 }
+        { id: 'S001', name: 'EPOK', price: 500, quantity: 15 },
+        { id: 'S002', name: 'Siberia', price: 600, quantity: 8 },
+        { id: 'S003', name: 'Odens', price: 550, quantity: 0 }
     ],
     'Жидкости': [
-        { id: 'liquid1', name: 'Honey Cream 3mg', price: 800, quantity: 20 },
-        { id: 'liquid2', name: 'Mango Ice 3mg', price: 800, quantity: 12 },
-        { id: 'liquid3', name: 'Strawberry 6mg', price: 800, quantity: 6 },
-        { id: 'liquid4', name: 'Tobacco 6mg', price: 800, quantity: 9 },
-        { id: 'liquid5', name: 'Menthol 0mg', price: 800, quantity: 4 },
-        { id: 'liquid6', name: 'Blueberry 3mg', price: 800, quantity: 11 }
+        { id: 'L001', name: 'Honey Cream 3mg', price: 800, quantity: 20 },
+        { id: 'L002', name: 'Mango Ice 3mg', price: 800, quantity: 12 },
+        { id: 'L003', name: 'Strawberry 6mg', price: 800, quantity: 6 },
+        { id: 'L004', name: 'Tobacco 6mg', price: 800, quantity: 9 },
+        { id: 'L005', name: 'Menthol 0mg', price: 800, quantity: 4 },
+        { id: 'L006', name: 'Blueberry 3mg', price: 800, quantity: 11 }
     ]
 };
 
@@ -291,23 +318,48 @@ bot.onText(/📊 Товары в наличии/, (msg) => {
     }
     
     let catalogText = '📊 <b>Товары в наличии:</b>\n\n';
+    let totalProducts = 0;
+    let availableProducts = 0;
     
     for (const categoryName in catalog) {
-        catalogText += `📦 <b>${categoryName}:</b>\n`;
         const category = catalog[categoryName];
-        
-        category.forEach(product => {
-            const status = product.quantity > 0 ? '✅' : '❌';
-            catalogText += `${status} ${product.name} - ${product.price}₽ (В наличии: ${product.quantity} шт.)\n`;
-        });
-        catalogText += '\n';
+        if (category.length > 0) {
+            catalogText += `📦 <b>${categoryName}:</b>\n`;
+            
+            category.forEach(product => {
+                totalProducts++;
+                if (product.quantity > 0) availableProducts++;
+                
+                const status = product.quantity > 0 ? '✅' : '❌';
+                const stockInfo = product.quantity > 0 ? `${product.quantity} шт.` : 'Нет в наличии';
+                catalogText += `${status} <b>${product.name}</b> (${product.id}) - ${product.price}₽ - ${stockInfo}\n`;
+            });
+            catalogText += '\n';
+        }
     }
     
-    if (Object.keys(catalog).length === 0) {
+    catalogText += `\n📈 <b>Статистика:</b>\n`;
+    catalogText += `📦 Всего товаров: ${totalProducts}\n`;
+    catalogText += `✅ Доступно: ${availableProducts}\n`;
+    catalogText += `❌ Отсутствует: ${totalProducts - availableProducts}`;
+    
+    if (totalProducts === 0) {
         catalogText = '📊 <b>Товары в наличии:</b>\n\n❌ Каталог пуст!';
     }
     
-    bot.sendMessage(chatId, catalogText, { parse_mode: 'HTML' });
+    const keyboard = {
+        reply_markup: {
+            inline_keyboard: [[
+                { text: '🔄 Обновить', callback_data: 'refresh_products' }
+            ]],
+            resize_keyboard: true
+        }
+    };
+    
+    bot.sendMessage(chatId, catalogText, { 
+        parse_mode: 'HTML',
+        reply_markup: keyboard.reply_markup
+    });
 });
 
 bot.onText(/➕ Добавить товар/, (msg) => {
@@ -318,15 +370,30 @@ bot.onText(/➕ Добавить товар/, (msg) => {
         return bot.sendMessage(chatId, '🚫 У вас нет прав для выполнения этой команды.');
     }
     
-    // Set user state to waiting for product details
+    // Set user state to waiting for category selection
     const user = getUser(chatId);
-    user.waitingForProductAdd = true;
+    user.waitingForCategory = true;
     
-    bot.sendMessage(chatId, '➕ <b>Добавление товара</b>\n\n' +
-        'Отправьте данные в формате:\n' +
-        '<code>категория|название|цена|количество</code>\n\n' +
-        'Пример: <code>Одноразки|HQD 3000|1200|15</code>', {
-        parse_mode: 'HTML'
+    const categories = Object.keys(catalog);
+    const categoryButtons = categories.map(cat => [cat]);
+    
+    // Add option for new category
+    categoryButtons.push(['➕ Создать новую категорию']);
+    
+    const keyboard = {
+        reply_markup: {
+            keyboard: [
+                ...categoryButtons,
+                ['🔙 Назад']
+            ],
+            resize_keyboard: true
+        }
+    };
+    
+    bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 1/4</b>\n\n' +
+        'Выберите категорию или создайте новую:', {
+        parse_mode: 'HTML',
+        ...keyboard
     });
 });
 
@@ -346,16 +413,19 @@ bot.onText(/🗑️ Удалить товар/, (msg) => {
         'Выберите товар для удаления:\n\n';
     
     for (const categoryName in catalog) {
-        catalogText += `📦 <b>${categoryName}:</b>\n`;
         const category = catalog[categoryName];
-        
-        category.forEach(product => {
-            catalogText += `🔹 ${product.name} (ID: ${product.id})\n`;
-        });
-        catalogText += '\n';
+        if (category.length > 0) {
+            catalogText += `📦 <b>${categoryName}:</b>\n`;
+            
+            category.forEach(product => {
+                const status = product.quantity > 0 ? '✅' : '❌';
+                catalogText += `${status} ${product.name} (${product.id}) - ${product.price}₽\n`;
+            });
+            catalogText += '\n';
+        }
     }
     
-    catalogText += '\nОтправьте ID товара для удаления.';
+    catalogText += '\nОтправьте ID товара для удаления (например: D001)';
     
     bot.sendMessage(chatId, catalogText, { parse_mode: 'HTML' });
 });
@@ -373,20 +443,22 @@ bot.onText(/📦 Изменить количество/, (msg) => {
     user.waitingForQuantityUpdate = true;
     
     let catalogText = '📦 <b>Изменение количества</b>\n\n' +
-        'Отправьте данные в формате:\n' +
-        '<code>ID товара|новое количество</code>\n\n';
+        'Выберите товар:\n\n';
     
     for (const categoryName in catalog) {
-        catalogText += `📦 <b>${categoryName}:</b>\n`;
         const category = catalog[categoryName];
-        
-        category.forEach(product => {
-            catalogText += `🔹 ${product.name} (ID: ${product.id}, сейчас: ${product.quantity} шт.)\n`;
-        });
-        catalogText += '\n';
+        if (category.length > 0) {
+            catalogText += `📦 <b>${categoryName}:</b>\n`;
+            
+            category.forEach(product => {
+                const status = product.quantity > 0 ? '✅' : '❌';
+                catalogText += `${status} ${product.name} (${product.id}) - сейчас: ${product.quantity} шт.\n`;
+            });
+            catalogText += '\n';
+        }
     }
     
-    catalogText += '\nПример: <code>disposable1|25</code>';
+    catalogText += '\nОтправьте ID товара и новое количество (например: D001|25)';
     
     bot.sendMessage(chatId, catalogText, { parse_mode: 'HTML' });
 });
@@ -539,6 +611,24 @@ bot.on('callback_query', (query) => {
             });
         }
     }
+    
+    // Handle refresh products button
+    if (data === 'refresh_products') {
+        const username = query.from.username;
+        if (isAdmin(username)) {
+            // Trigger products display again
+            const refreshMsg = { ...query.message, text: '📊 Товары в наличии' };
+            const handler = bot.getTextHandler && bot.getTextHandler(/📊 Товары в наличии/);
+            if (handler) {
+                handler(refreshMsg);
+            }
+        }
+        
+        bot.answerCallbackQuery(query.id, {
+            text: '🔄 Обновлено!',
+            show_alert: false
+        });
+    }
 });
 
 // Handle cart
@@ -604,7 +694,151 @@ bot.on('message', async (msg) => {
     
     // Handle admin commands
     if (isAdmin(username)) {
-        // Handle product addition
+        // Handle category selection for product addition
+        if (user.waitingForCategory) {
+            user.waitingForCategory = false;
+            
+            if (msg.text === '➕ Создать новую категорию') {
+                user.waitingForNewCategory = true;
+                bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 2/4</b>\n\n' +
+                    'Введите название новой категории:', {
+                    parse_mode: 'HTML'
+                    });
+                return;
+            }
+            
+            // Check if category exists
+            if (!catalog[msg.text]) {
+                user.waitingForCategory = true;
+                bot.sendMessage(chatId, '❌ <b>Категория не найдена!</b>\n\n' +
+                    'Выберите существующую категорию или создайте новую:', {
+                    parse_mode: 'HTML'
+                    });
+                return;
+            }
+            
+            user.selectedCategory = msg.text;
+            user.waitingForProductName = true;
+            
+            bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 2/4</b>\n\n' +
+                `Выбрана категория: <b>${msg.text}</b>\n\n` +
+                'Введите название товара:', {
+                parse_mode: 'HTML'
+                });
+            return;
+        }
+        
+        // Handle new category creation
+        if (user.waitingForNewCategory) {
+            user.waitingForNewCategory = false;
+            user.selectedCategory = msg.text;
+            user.waitingForProductName = true;
+            
+            bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 3/4</b>\n\n' +
+                `Создана категория: <b>${msg.text}</b>\n\n` +
+                'Введите название товара:', {
+                parse_mode: 'HTML'
+                });
+            return;
+        }
+        
+        // Handle product name input
+        if (user.waitingForProductName) {
+            user.waitingForProductName = false;
+            user.productName = msg.text;
+            user.waitingForProductPrice = true;
+            
+            bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 3/4</b>\n\n' +
+                `Название товара: <b>${msg.text}</b>\n\n` +
+                'Введите цену товара (в рублях):', {
+                parse_mode: 'HTML'
+                });
+            return;
+        }
+        
+        // Handle product price input
+        if (user.waitingForProductPrice) {
+            const price = parseInt(msg.text);
+            if (isNaN(price) || price <= 0) {
+                bot.sendMessage(chatId, '❌ <b>Неверная цена!</b>\n\n' +
+                    'Введите корректную цену (только цифры):', {
+                    parse_mode: 'HTML'
+                    });
+                return;
+            }
+            
+            user.waitingForProductPrice = false;
+            user.productPrice = price;
+            user.waitingForProductQuantity = true;
+            
+            bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 4/4</b>\n\n' +
+                `Цена: <b>${price}₽</b>\n\n` +
+                'Введите количество товара:', {
+                parse_mode: 'HTML'
+                });
+            return;
+        }
+        
+        // Handle product quantity input
+        if (user.waitingForProductQuantity) {
+            const quantity = parseInt(msg.text);
+            if (isNaN(quantity) || quantity < 0) {
+                bot.sendMessage(chatId, '❌ <b>Неверное количество!</b>\n\n' +
+                    'Введите корректное количество (только цифры):', {
+                    parse_mode: 'HTML'
+                    });
+                return;
+            }
+            
+            user.waitingForProductQuantity = false;
+            
+            // Add the product
+            const newProduct = addProduct(user.selectedCategory, user.productName, user.productPrice, quantity);
+            
+            // Clean up user state
+            delete user.selectedCategory;
+            delete user.productName;
+            delete user.productPrice;
+            
+            bot.sendMessage(chatId, `✅ <b>Товар успешно добавлен!</b>\n\n` +
+                `📦 Категория: ${user.selectedCategory}\n` +
+                `📝 Название: ${user.productName}\n` +
+                `💰 Цена: ${user.productPrice}₽\n` +
+                `📊 Количество: ${quantity} шт.\n` +
+                `🆔 ID: ${newProduct.id}`, {
+                parse_mode: 'HTML'
+                });
+            
+            // Show admin menu again
+            const adminMenuMsg = { ...msg, text: '/admin' };
+            const adminHandler = bot.getTextHandler && bot.getTextHandler(/👨‍💼 Админка/);
+            if (adminHandler) {
+                adminHandler(adminMenuMsg);
+            } else {
+                // Fallback - show admin menu directly
+                const adminMenu = {
+                    reply_markup: {
+                        keyboard: [
+                            ['📊 Товары в наличии'],
+                            ['➕ Добавить товар'],
+                            ['🗑️ Удалить товар'],
+                            ['📦 Изменить количество'],
+                            ['🧹 Очистить отсутствующие'],
+                            ['🔙 Назад']
+                        ],
+                        resize_keyboard: true
+                    }
+                };
+                
+                bot.sendMessage(chatId, '👨‍💼 <b>Панель администратора</b>\n\nВыберите действие:', {
+                    parse_mode: 'HTML',
+                    ...adminMenu
+                });
+            }
+            return;
+        }
+        
+        // Handle product addition (old method - keep for compatibility)
         if (user.waitingForProductAdd) {
             user.waitingForProductAdd = false;
             
@@ -630,20 +864,32 @@ bot.on('message', async (msg) => {
         if (user.waitingForProductRemove) {
             user.waitingForProductRemove = false;
             
-            const productId = msg.text.trim();
+            const productId = msg.text.trim().toUpperCase();
             let removed = false;
+            let removedProductInfo = '';
             
             for (const categoryName in catalog) {
-                if (removeProduct(categoryName, productId)) {
+                const category = catalog[categoryName];
+                const productIndex = category.findIndex(p => p.id.toUpperCase() === productId);
+                
+                if (productIndex !== -1) {
+                    const removedProduct = category[productIndex];
+                    removedProductInfo = `${removedProduct.name} (${removedProduct.id})`;
+                    category.splice(productIndex, 1);
                     removed = true;
+                    
+                    // Remove empty categories
+                    if (category.length === 0) {
+                        delete catalog[categoryName];
+                    }
                     break;
                 }
             }
             
             if (removed) {
-                bot.sendMessage(chatId, `✅ <b>Товар удален!</b>\n\n🆔 ID: ${productId}`, { parse_mode: 'HTML' });
+                bot.sendMessage(chatId, `✅ <b>Товар удален!</b>\n\n🗑️ Удален: ${removedProductInfo}`, { parse_mode: 'HTML' });
             } else {
-                bot.sendMessage(chatId, `❌ <b>Товар не найден!</b>\n\n🆔 ID: ${productId}`, { parse_mode: 'HTML' });
+                bot.sendMessage(chatId, `❌ <b>Товар не найден!</b>\n\n🆔 ID: ${productId}\n\nПроверьте правильность ID и попробуйте снова.`, { parse_mode: 'HTML' });
             }
             return;
         }
@@ -655,25 +901,39 @@ bot.on('message', async (msg) => {
             const parts = msg.text.split('|');
             if (parts.length === 2) {
                 const [productId, newQuantity] = parts;
+                const id = productId.trim().toUpperCase();
+                const quantity = parseInt(newQuantity);
+                
+                if (isNaN(quantity) || quantity < 0) {
+                    bot.sendMessage(chatId, '❌ <b>Неверное количество!</b>\n\nВведите корректное количество (только цифры):', { parse_mode: 'HTML' });
+                    return;
+                }
+                
                 let updated = false;
+                let updatedProductInfo = '';
                 
                 for (const categoryName in catalog) {
-                    if (updateProductQuantity(categoryName, productId.trim(), parseInt(newQuantity))) {
+                    const category = catalog[categoryName];
+                    const product = category.find(p => p.id.toUpperCase() === id);
+                    
+                    if (product) {
+                        const oldQuantity = product.quantity;
+                        product.quantity = quantity;
+                        updatedProductInfo = `${product.name} (${product.id}): ${oldQuantity} → ${quantity} шт.`;
                         updated = true;
                         break;
                     }
                 }
                 
                 if (updated) {
-                    bot.sendMessage(chatId, `✅ <b>Количество обновлено!</b>\n\n` +
-                        `🆔 ID: ${productId}\n` +
-                        `📊 Новое количество: ${newQuantity} шт.`, { parse_mode: 'HTML' });
+                    bot.sendMessage(chatId, `✅ <b>Количество обновлено!</b>\n\n📦 Обновлен: ${updatedProductInfo}`, { parse_mode: 'HTML' });
                 } else {
-                    bot.sendMessage(chatId, `❌ <b>Товар не найден!</b>\n\n🆔 ID: ${productId}`, { parse_mode: 'HTML' });
+                    bot.sendMessage(chatId, `❌ <b>Товар не найден!</b>\n\n🆔 ID: ${id}\n\nПроверьте правильность ID и попробуйте снова.`, { parse_mode: 'HTML' });
                 }
             } else {
                 bot.sendMessage(chatId, '❌ <b>Неверный формат!</b>\n\n' +
-                    'Используйте формат: <code>ID товара|новое количество</code>', { parse_mode: 'HTML' });
+                    'Используйте формат: <code>ID товара|новое количество</code>\n\n' +
+                    'Пример: <code>D001|25</code>', { parse_mode: 'HTML' });
             }
             return;
         }
