@@ -103,20 +103,22 @@ function removeOutOfStockProducts() {
     return removedProducts;
 }
 
-// Helper function to generate simple product ID (0-999)
-function generateProductId(categoryName) {
-    const existingProducts = catalog[categoryName] || [];
-    
-    // Find the highest existing number in this category
+// Helper function to generate simple product ID (1-999 globally)
+function generateProductId() {
+    // Find the highest existing ID across all categories
     let maxNum = 0;
-    existingProducts.forEach(product => {
-        if (product.id) {
-            const num = parseInt(product.id);
-            if (!isNaN(num) && num > maxNum) {
-                maxNum = num;
+    
+    for (const categoryName in catalog) {
+        const category = catalog[categoryName];
+        category.forEach(product => {
+            if (product.id) {
+                const num = parseInt(product.id);
+                if (!isNaN(num) && num > maxNum) {
+                    maxNum = num;
+                }
             }
-        }
-    });
+        });
+    }
     
     const newNum = maxNum + 1;
     return newNum.toString();
@@ -128,7 +130,7 @@ function addProduct(categoryName, name, price, quantity) {
         catalog[categoryName] = [];
     }
     
-    const id = generateProductId(categoryName);
+    const id = generateProductId();
     const newProduct = { id, name, price, quantity };
     catalog[categoryName].push(newProduct);
     
@@ -364,7 +366,7 @@ bot.onText(/➕ Добавить товар/, (msg) => {
     
     // Set user state to waiting for category selection
     const user = getUser(chatId);
-    user.waitingForQuickCategory = true;
+    user.waitingForCategory = true;
     
     const categories = Object.keys(catalog);
     const categoryButtons = categories.map(cat => [cat]);
@@ -382,8 +384,8 @@ bot.onText(/➕ Добавить товар/, (msg) => {
         }
     };
     
-    bot.sendMessage(chatId, '➕ <b>Быстрое добавление товара</b>\n\n' +
-        'Выберите категорию или создайте новую:', {
+    bot.sendMessage(chatId, '➕ <b>Добавление товара</b>\n\n' +
+        'Выберите категорию:', {
         parse_mode: 'HTML',
         ...keyboard
     });
@@ -1200,13 +1202,13 @@ bot.on('message', async (msg) => {
             return;
         }
         
-        // Handle old category selection (for backward compatibility)
+        // Handle category selection for adding products
         if (user.waitingForCategory) {
             user.waitingForCategory = false;
             
             if (msg.text === '➕ Создать новую категорию') {
                 user.waitingForNewCategory = true;
-                bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 2/4</b>\n\n' +
+                bot.sendMessage(chatId, '➕ <b>Создание новой категории</b>\n\n' +
                     'Введите название новой категории:', {
                     parse_mode: 'HTML'
                     });
@@ -1224,13 +1226,83 @@ bot.on('message', async (msg) => {
             }
             
             user.selectedCategory = msg.text;
-            user.waitingForProductName = true;
+            user.waitingForProductData = true;
             
-            bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 2/4</b>\n\n' +
+            bot.sendMessage(chatId, '➕ <b>Добавление товара</b>\n\n' +
                 `Выбрана категория: <b>${msg.text}</b>\n\n` +
-                'Введите название товара:', {
+                'Отправьте данные в формате:\n' +
+                '<code>название|цена|количество</code>\n\n' +
+                'Пример: <code>HQD 3000|1200|15</code>\n\n' +
+                'Или отправьте список товаров:\n' +
+                '<code>название|цена|количество</code>\n' +
+                '<code>название|цена|количество</code>\n' +
+                '<code>название|цена|количество</code>', {
                 parse_mode: 'HTML'
                 });
+            return;
+        }
+        
+        // Handle product data input (single or multiple)
+        if (user.waitingForProductData) {
+            user.waitingForProductData = false;
+            
+            const lines = msg.text.trim().split('\n');
+            const addedProducts = [];
+            const errors = [];
+            
+            lines.forEach((line, index) => {
+                const parts = line.split('|');
+                if (parts.length === 3) {
+                    const [name, price, quantity] = parts;
+                    const newProduct = addProduct(user.selectedCategory, name.trim(), parseInt(price), parseInt(quantity));
+                    addedProducts.push(newProduct);
+                } else {
+                    errors.push(`Строка ${index + 1}: неверный формат`);
+                }
+            });
+            
+            // Clean up user state
+            delete user.selectedCategory;
+            
+            if (addedProducts.length > 0) {
+                let message = `✅ <b>Товары успешно добавлены!</b>\n\n` +
+                    `📦 Категория: ${user.selectedCategory}\n\n` +
+                    `📝 Добавлено товаров: ${addedProducts.length}\n\n`;
+                
+                if (addedProducts.length <= 5) {
+                    message += '<b>Добавленные товары:</b>\n';
+                    addedProducts.forEach(product => {
+                        message += `🆔 ID: ${product.id} | ${product.name} | ${product.price}₽ | ${product.quantity} шт.\n`;
+                    });
+                } else {
+                    message += `Первые 5 товаров:\n`;
+                    addedProducts.slice(0, 5).forEach(product => {
+                        message += `🆔 ID: ${product.id} | ${product.name} | ${product.price}₽ | ${product.quantity} шт.\n`;
+                    });
+                    if (addedProducts.length > 5) {
+                        message += `... и еще ${addedProducts.length - 5} товаров`;
+                    }
+                }
+                
+                if (errors.length > 0) {
+                    message += `\n\n❌ <b>Ошибки:</b>\n${errors.join('\n')}`;
+                }
+                
+                bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+            } else {
+                bot.sendMessage(chatId, '❌ <b>Неверный формат!</b>\n\n' +
+                    'Используйте формат: <code>название|цена|количество</code>\n\n' +
+                    'Пример: <code>HQD 3000|1200|15</code>', {
+                    parse_mode: 'HTML'
+                    });
+            }
+            
+            // Show admin menu again
+            const adminMenuMsg = { ...msg, text: '/admin' };
+            const adminHandler = bot.getTextHandler && bot.getTextHandler(/👨‍💼 Админка/);
+            if (adminHandler) {
+                adminHandler(adminMenuMsg);
+            }
             return;
         }
         
@@ -1238,11 +1310,17 @@ bot.on('message', async (msg) => {
         if (user.waitingForNewCategory) {
             user.waitingForNewCategory = false;
             user.selectedCategory = msg.text;
-            user.waitingForProductName = true;
+            user.waitingForProductData = true;
             
-            bot.sendMessage(chatId, '➕ <b>Добавление товара - Шаг 3/4</b>\n\n' +
+            bot.sendMessage(chatId, '➕ <b>Добавление товара</b>\n\n' +
                 `Создана категория: <b>${msg.text}</b>\n\n` +
-                'Введите название товара:', {
+                'Отправьте данные в формате:\n' +
+                '<code>название|цена|количество</code>\n\n' +
+                'Пример: <code>HQD 3000|1200|15</code>\n\n' +
+                'Или отправьте список товаров:\n' +
+                '<code>название|цена|количество</code>\n' +
+                '<code>название|цена|количество</code>\n' +
+                '<code>название|цена|количество</code>', {
                 parse_mode: 'HTML'
                 });
             return;
