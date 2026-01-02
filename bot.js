@@ -103,23 +103,15 @@ function removeOutOfStockProducts() {
     return removedProducts;
 }
 
-// Helper function to generate simple product ID (1-3 digits)
+// Helper function to generate simple product ID (0-999)
 function generateProductId(categoryName) {
-    const categoryMap = {
-        'Одноразки': 'D',
-        'Подсистемы': 'P', 
-        'Снюс': 'S',
-        'Жидкости': 'L'
-    };
-    
-    const prefix = categoryMap[categoryName] || 'X';
     const existingProducts = catalog[categoryName] || [];
     
     // Find the highest existing number in this category
     let maxNum = 0;
     existingProducts.forEach(product => {
-        if (product.id && product.id.startsWith(prefix)) {
-            const num = parseInt(product.id.replace(prefix, ''));
+        if (product.id) {
+            const num = parseInt(product.id);
             if (!isNaN(num) && num > maxNum) {
                 maxNum = num;
             }
@@ -127,7 +119,7 @@ function generateProductId(categoryName) {
     });
     
     const newNum = maxNum + 1;
-    return prefix + newNum.toString().padStart(3, '0');
+    return newNum.toString();
 }
 
 // Helper function to add product
@@ -175,30 +167,30 @@ function updateProductQuantity(categoryName, productId, newQuantity) {
     return false;
 }
 
-// Product catalog with quantity tracking and simple IDs (1-3 digits)
+// Product catalog with quantity tracking and simple numeric IDs (0-999)
 const catalog = {
     'Одноразки': [
-        { id: 'D001', name: 'HQD 2500', price: 1000, quantity: 10 },
-        { id: 'D002', name: 'Ivy', price: 1200, quantity: 5 },
-        { id: 'D003', name: 'Maskking', price: 1500, quantity: 0 }
+        { id: '1', name: 'HQD 2500', price: 1000, quantity: 10 },
+        { id: '2', name: 'Ivy', price: 1200, quantity: 5 },
+        { id: '3', name: 'Maskking', price: 1500, quantity: 0 }
     ],
     'Подсистемы': [
-        { id: 'P001', name: 'Voopoo', price: 2500, quantity: 3 },
-        { id: 'P002', name: 'Uwell', price: 3000, quantity: 7 },
-        { id: 'P003', name: 'спизженный хиро 3 в ахуитительном состоянии', price: 5000, quantity: 1 }
+        { id: '4', name: 'Voopoo', price: 2500, quantity: 3 },
+        { id: '5', name: 'Uwell', price: 3000, quantity: 7 },
+        { id: '6', name: 'спизженный хиро 3 в ахуитительном состоянии', price: 5000, quantity: 1 }
     ],
     'Снюс': [
-        { id: 'S001', name: 'EPOK', price: 500, quantity: 15 },
-        { id: 'S002', name: 'Siberia', price: 600, quantity: 8 },
-        { id: 'S003', name: 'Odens', price: 550, quantity: 0 }
+        { id: '7', name: 'EPOK', price: 500, quantity: 15 },
+        { id: '8', name: 'Siberia', price: 600, quantity: 8 },
+        { id: '9', name: 'Odens', price: 550, quantity: 0 }
     ],
     'Жидкости': [
-        { id: 'L001', name: 'Honey Cream 3mg', price: 800, quantity: 20 },
-        { id: 'L002', name: 'Mango Ice 3mg', price: 800, quantity: 12 },
-        { id: 'L003', name: 'Strawberry 6mg', price: 800, quantity: 6 },
-        { id: 'L004', name: 'Tobacco 6mg', price: 800, quantity: 9 },
-        { id: 'L005', name: 'Menthol 0mg', price: 800, quantity: 4 },
-        { id: 'L006', name: 'Blueberry 3mg', price: 800, quantity: 11 }
+        { id: '10', name: 'Honey Cream 3mg', price: 800, quantity: 20 },
+        { id: '11', name: 'Mango Ice 3mg', price: 800, quantity: 12 },
+        { id: '12', name: 'Strawberry 6mg', price: 800, quantity: 6 },
+        { id: '13', name: 'Tobacco 6mg', price: 800, quantity: 9 },
+        { id: '14', name: 'Menthol 0mg', price: 800, quantity: 4 },
+        { id: '15', name: 'Blueberry 3mg', price: 800, quantity: 11 }
     ]
 };
 
@@ -1380,8 +1372,26 @@ bot.on('message', async (msg) => {
                     `📊 Количество: ${quantity} шт.\n` +
                     `🆔 ID: ${newProduct.id}`, { parse_mode: 'HTML' });
             } else {
+                // Show format example with buttons
+                const formatKeyboard = {
+                    reply_markup: {
+                        keyboard: [
+                            ['Одноразки|HQD 3000|1200|15'],
+                            ['Подсистемы|Voopoo|2500|5'],
+                            ['Снюс|EPOK|500|20'],
+                            ['Жидкости|Mango Ice|800|10'],
+                            ['🔙 Назад']
+                        ],
+                        resize_keyboard: true
+                    }
+                };
+                
                 bot.sendMessage(chatId, '❌ <b>Неверный формат!</b>\n\n' +
-                    'Используйте формат: <code>категория|название|цена|количество</code>', { parse_mode: 'HTML' });
+                    'Используйте формат: <code>категория|название|цена|количество</code>\n\n' +
+                    'Или выберите готовый пример:', {
+                    parse_mode: 'HTML',
+                    ...formatKeyboard
+                });
             }
             return;
         }
@@ -1390,13 +1400,13 @@ bot.on('message', async (msg) => {
         if (user.waitingForProductRemove) {
             user.waitingForProductRemove = false;
             
-            const productId = msg.text.trim().toUpperCase();
+            const productId = msg.text.trim();
             let removed = false;
             let removedProductInfo = '';
             
             for (const categoryName in catalog) {
                 const category = catalog[categoryName];
-                const productIndex = category.findIndex(p => p.id.toUpperCase() === productId);
+                const productIndex = category.findIndex(p => p.id === productId);
                 
                 if (productIndex !== -1) {
                     const removedProduct = category[productIndex];
@@ -1427,7 +1437,7 @@ bot.on('message', async (msg) => {
             const parts = msg.text.split('|');
             if (parts.length === 2) {
                 const [productId, newQuantity] = parts;
-                const id = productId.trim().toUpperCase();
+                const id = productId.trim();
                 const quantity = parseInt(newQuantity);
                 
                 if (isNaN(quantity) || quantity < 0) {
@@ -1440,7 +1450,7 @@ bot.on('message', async (msg) => {
                 
                 for (const categoryName in catalog) {
                     const category = catalog[categoryName];
-                    const product = category.find(p => p.id.toUpperCase() === id);
+                    const product = category.find(p => p.id === id);
                     
                     if (product) {
                         const oldQuantity = product.quantity;
@@ -1459,7 +1469,7 @@ bot.on('message', async (msg) => {
             } else {
                 bot.sendMessage(chatId, '❌ <b>Неверный формат!</b>\n\n' +
                     'Используйте формат: <code>ID товара|новое количество</code>\n\n' +
-                    'Пример: <code>D001|25</code>', { parse_mode: 'HTML' });
+                    'Пример: <code>1|25</code>', { parse_mode: 'HTML' });
             }
             return;
         }
